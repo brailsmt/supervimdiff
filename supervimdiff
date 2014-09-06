@@ -1,0 +1,68 @@
+#!/bin/bash
+# This is based on https://github.com/whiteinge/dotfiles/blob/master/bin/diffconflicts
+#
+# Git mergetool is awesome.  Vimdiff is awesome.  mergetool + vimdiff sucks.  This is because vimdiff does a poor job
+# with 3 way diffs.  The display is extremely busy and it is hard to figure out what is going on, even for seasoned 
+# vim veterans.  Vimdiff does a great job with 2-way side-by-side diffs.  git-mergetool sets the following environment
+# variables:
+#  - LOCAL:   This is the local file that is being merged with the REMOTE
+#  - REMOTE:  This is the "remote" file, it is the file being merged into the LOCAL
+#  - BASE:    This is the last common ancestor of the LOCAL and REMOTE files
+#  - MERGED:  This is the local file with the inline diffs in classical RCS/CVS/SVN style
+#
+# This script creates 4 tab pages.  
+#  - The first tabpage contains a 2-way diff of the LOCAL and REMOTE files.
+#  - The second tabpage contains a 2-way diff of the LOCAL and BASE files.
+#  - The third tabpage coontains a 2-way diff of the REMOTE and BASE files.
+#  - The fourth tabpage contains the MERGED file showing the inline changes.
+#
+# Workflow:
+#
+# All changes should be saved in the LOCAL file.  If vim exits without an error code, this file will be used to continue
+# the merge/rebase.
+#
+# Configuration:
+#
+# Set the following git config settings:
+#
+#    merge.tool=supervimdiff
+#    merge.conflictstyle=diff3
+#    mergetool.prompt=false
+#    mergetool.supervimdiff.cmd=supervimdiff $EDITOR $BASE $LOCAL $REMOTE $MERGED
+#    mergetool.supervimdiff.trustexitcode=true
+#    mergetool.supervimdiff.keepbackup=false
+#
+# Use :cq to abort the merge and exit Vim with an error code.
+
+if [[ -z $@ || $# != "5" ]] ; then
+    echo -e "Usage: $0 \$EDITOR \$BASE \$LOCAL \$REMOTE \$MERGED"
+    exit 1
+fi
+
+cmd=$1
+BASE="$2"
+LOCAL="$3"
+REMOTE="$4"
+MERGED="$5"
+
+# Fire up vimdiff, this could probably be improved, vim only allows 10 -c options
+$cmd -f -R -d "${LOCAL}" "${REMOTE}" \
+    -c ":let g:miniBufExplBuffersNeeded=100" \
+    -c ":set equalalways noro" \
+    -c ":tabe $BASE" \
+    -c ":vert diffs $LOCAL" \
+    -c ":tabe $BASE" \
+    -c ":vert diffs $REMOTE" \
+    -c ":winc t"  \
+    -c ":tabe $MERGED" \
+    -c ":tabfir"
+
+EC=$?
+
+# Overwrite $MERGED only if vimdiff exits cleanly.
+# TODO:  Add a check to protect against overwriting MERGED with merge symbols in it.
+if [[ $EC == "0" ]] ; then
+    cat "${LOCAL}" > "${MERGED}"
+fi
+
+exit $EC
